@@ -4,6 +4,26 @@ from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 
+from histdata.api import *
+
+from deltalake import write_deltalake
+from zipfile import ZipFile
+from typing import Union
+import pandas as pd
+import io
+
+COL_NAMES = ['date', 'open', 'high', 'low', 'close', 'volume']
+
+def pips2val(pip:int) -> float:
+    return (1e-4)*pip
+
+def extract_data(file, col_names = COL_NAMES) -> Union[pd.DataFrame, None]:
+    with ZipFile(file, 'r') as zip:
+        for f in zip.namelist():
+            if '.csv' in f:
+                df = pd.read_csv(zip.open(f), sep=';', names=col_names)
+                zip.close()
+                return df
 
 class TimeFrame:
     ONE_MINUTE = 'M1'
@@ -129,19 +149,24 @@ def download_hist_data(year='2016',
         print(data)
     if not os.path.exists(output_directory):
         os.makedirs(output_directory)
-    if month is None:
-        output_filename = 'DAT_{}_{}_{}_{}.zip'.format(platform, pair.upper(), time_frame, str(year))
-    else:
-        output_filename = 'DAT_{}_{}_{}_{}.zip'.format(platform, pair.upper(), time_frame,
-                                                       '{}{}'.format(year, str(month).zfill(2)))
-    output_filename = os.path.join(output_directory, output_filename)
-    with open(output_filename, 'wb') as f:
-        for chunk in r.iter_content(chunk_size=1024):
-            if chunk:
-                f.write(chunk)
+
+    df = extract_data(io.BytesIO(r.content))
+    if df is None:
+        return None
+    
+
+    df.drop(columns=['volume'], inplace=True)
+    df.date = pd.to_datetime(df.date)
+    df['year'] = df.date.dt.year
+    df['pair'] = pair.upper()  
+
+    # save to delta lake
+    write_deltalake(output_directory, df, mode='append', partition_by=['pair', 'year'])
+
+
     if verbose:
-        print('Wrote to {}'.format(output_filename))
-    return output_filename
+        print('Wrote to {}'.format(output_directory))
+    return df
 
 
 if __name__ == '__main__':
