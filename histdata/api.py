@@ -114,7 +114,7 @@ def download_hist_data(year='2016',
 
     if verbose:
         print(referer)
-    r1 = requests.get(referer, allow_redirects=True)
+    r1 = requests.get(referer, allow_redirects=True, verify=False)
     assert r1.status_code == 200, 'Make sure the website www.histdata.com is up.'
 
     soup = BeautifulSoup(r1.content, 'html.parser')
@@ -133,7 +133,7 @@ def download_hist_data(year='2016',
             'fxpair': pair.upper()}
     r = requests.post(url='https://www.histdata.com/get.php',
                       data=data,
-                      headers=headers)
+                      headers=headers, verify=False)
 
     assert len(r.content) > 0, 'No data could be found here.'
     if verbose:
