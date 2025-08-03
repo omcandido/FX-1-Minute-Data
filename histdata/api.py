@@ -4,6 +4,23 @@ from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 
+# ========================================================================
+from deltalake import write_deltalake
+from zipfile import ZipFile
+from typing import Union
+import pandas as pd
+import io
+
+COL_NAMES = ['date', 'open', 'high', 'low', 'close', 'volume']
+
+def extract_data(file, col_names = COL_NAMES) -> Union[pd.DataFrame, None]:
+    with ZipFile(file, 'r') as zip:
+        for f in zip.namelist():
+            if '.csv' in f:
+                df = pd.read_csv(zip.open(f), sep=';', names=col_names)
+                zip.close()
+                return df
+# ========================================================================
 
 class TimeFrame:
     ONE_MINUTE = 'M1'
@@ -68,7 +85,10 @@ def download_hist_data(year='2016',
                        time_frame=TimeFrame.ONE_MINUTE,
                        platform=Platform.GENERIC_ASCII,
                        output_directory='.',
-                       verbose=True):
+                       verbose=True,
+                       verify=False,
+                       delta_lake=False,
+                       ):
     """
     Download 1-Minute FX data per month.
     :param year: Trading year. Format is 2016.
@@ -114,7 +134,7 @@ def download_hist_data(year='2016',
 
     if verbose:
         print(referer)
-    r1 = requests.get(referer, allow_redirects=True, verify=False)
+    r1 = requests.get(referer, allow_redirects=True, verify=verify)
     assert r1.status_code == 200, 'Make sure the website www.histdata.com is up.'
 
     soup = BeautifulSoup(r1.content, 'html.parser')
@@ -133,17 +153,32 @@ def download_hist_data(year='2016',
             'fxpair': pair.upper()}
     r = requests.post(url='https://www.histdata.com/get.php',
                       data=data,
-                      headers=headers, verify=False)
+                      headers=headers, verify=verify)
 
     assert len(r.content) > 0, 'No data could be found here.'
     if verbose:
         print(data)
     if not os.path.exists(output_directory):
         os.makedirs(output_directory)
-    with open(output_filename, 'wb') as f:
-        for chunk in r.iter_content(chunk_size=1024):
-            if chunk:
-                f.write(chunk)
+
+    if delta_lake:
+
+        df = extract_data(io.BytesIO(r.content))
+        if df is None:
+            return None
+
+        df.drop(columns=['volume'], inplace=True)
+        df.date = pd.to_datetime(df.date)
+        df['year'] = df.date.dt.year
+        df['pair'] = pair.upper()  
+
+        write_deltalake(output_directory, df, mode='append', partition_by=['pair', 'year'])
+    else:
+        with open(output_filename, 'wb') as f:
+            for chunk in r.iter_content(chunk_size=1024):
+                if chunk:
+                    f.write(chunk)
+    
     if verbose:
         print('Wrote to {}'.format(output_filename))
     return output_filename
