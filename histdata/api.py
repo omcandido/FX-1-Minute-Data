@@ -1,4 +1,5 @@
 import os
+import sys
 from datetime import datetime
 
 import requests
@@ -10,6 +11,13 @@ from zipfile import ZipFile
 from typing import Union
 import pandas as pd
 import io
+
+# Add parent directory to path to import fx_logging
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from fx_logging import get_project_logger
+
+# Setup logging
+logger = get_project_logger(__name__)
 
 COL_NAMES = ['date', 'open', 'high', 'low', 'close', 'volume']
 
@@ -108,7 +116,7 @@ def download_hist_data(year='2016',
 
     if os.path.exists(output_filename):
         if verbose:
-            print(f"{output_filename} realdy exists, skipping download")
+            logger.info(f"{output_filename} already exists, skipping download")
         return output_filename
 
     tick_data = time_frame.startswith('T')
@@ -133,7 +141,7 @@ def download_hist_data(year='2016',
                'Referer': referer}
 
     if verbose:
-        print(referer)
+        logger.info(f"Requesting data from: {referer}")
     r1 = requests.get(referer, allow_redirects=True, verify=verify)
     assert r1.status_code == 200, 'Make sure the website www.histdata.com is up.'
 
@@ -157,7 +165,7 @@ def download_hist_data(year='2016',
 
     assert len(r.content) > 0, 'No data could be found here.'
     if verbose:
-        print(data)
+        logger.debug(f"Download request data: {data}")
     if not os.path.exists(output_directory):
         os.makedirs(output_directory)
 
@@ -180,7 +188,7 @@ def download_hist_data(year='2016',
                     f.write(chunk)
     
     if verbose:
-        print('Wrote to {}'.format(output_filename))
+        logger.info(f'Wrote to {output_filename}')
     return output_filename
 
 

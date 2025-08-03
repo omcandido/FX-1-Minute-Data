@@ -1,6 +1,15 @@
 # copy paste from http://www.histdata.com/download-free-forex-data/?/ascii/1-minute-bar-quotes > raw.txt
 
 import calendar
+import sys
+import os
+
+# Add parent directory to path to import fx_logging
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from fx_logging import get_project_logger
+
+# Setup logging
+logger = get_project_logger(__name__)
 
 if __name__ == '__main__':
     all_tokens = []
@@ -8,7 +17,7 @@ if __name__ == '__main__':
         lines = r.readlines()
         for line in lines:
             all_tokens.extend(line.strip().split('\t'))
-    print(all_tokens)
+    logger.debug(f"Extracted tokens: {all_tokens}")
 
     cal_month = {v: k for k,v in enumerate(calendar.month_abbr)}
     output_currency = list()
@@ -17,7 +26,7 @@ if __name__ == '__main__':
     for i in range(1, len(all_tokens), 2):
         pair = all_tokens[i - 1]
         beg = all_tokens[i]
-        print(pair, beg)
+        logger.info(f"Processing pair {pair} with beginning date {beg}")
         currency = pair.replace('/', '').lower()
         output_currency.append(currency)
         output_pair.append(pair)
@@ -33,3 +42,4 @@ if __name__ == '__main__':
     d['currency_pair_code'] = output_currency
     d['history_first_trading_month'] = history_first_trading_month
     d.to_csv('output.csv', index=False, sep='\t')
+    logger.info("Successfully created output.csv with currency pair data")
